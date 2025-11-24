@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"usamaqaisrani/git-good/porcelain"
+	"usamaqaisrani/git-good/plumbing"
 )
 
 var commands = map[string]struct{}{
@@ -38,5 +39,5 @@ func hashObject(args []string) {
 		return	
 	}
 	fmt.Println("Creating hash of the file")
-	porcelain.Stage(args[1])
+	plumbing.HashFile(args[1])
 }
