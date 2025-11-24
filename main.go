@@ -10,6 +10,7 @@ import (
 var commands = map[string]struct{}{
     "init": {},
 	"hash-object": {},
+	"add": {},
 }
 
 func main() {
@@ -30,6 +31,8 @@ func main() {
 		porcelain.Init()
 	case "hash-object":
 		hashObject(args)
+	case "add":
+		stage(args)
 	}
 }
 
@@ -39,5 +42,19 @@ func hashObject(args []string) {
 		return	
 	}
 	fmt.Println("Creating hash of the file")
-	plumbing.HashFile(args[1])
+	content, err := plumbing.ReadFile(args[1])
+	if err != nil {
+		fmt.Printf("Error occured while reading contents of %s: %s", args[1], err)
+		return
+	}
+	plumbing.HashFile(content)
+}
+
+func stage(args []string) {
+	if len(args) < 2 {
+		fmt.Print("Missing path to file name.")
+		return	
+	}
+	fmt.Println("Creating hash of the file")
+	porcelain.Stage(args[1])
 }

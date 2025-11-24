@@ -1,7 +1,6 @@
 package plumbing
 
 import (
-	"log"
 	"os"
 	"crypto/sha1"
     "encoding/hex"
@@ -10,7 +9,7 @@ import (
     "compress/zlib"
 )
 
-func readFile(filePath string) ([]byte, error) {
+func ReadFile(filePath string) ([]byte, error) {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
@@ -21,25 +20,15 @@ func readFile(filePath string) ([]byte, error) {
 	return byteStream, nil
 }
 
-func HashFile(filePath string) {
-	stream, err := readFile(filePath)
-	if err != nil {
-		log.Fatalf("Error while getting content of the %s: %s", filePath, err)
-	}
-
+func HashFile(content []byte) string {
 	hash := sha1.New()
-	hash.Write(stream)
+	hash.Write(content)
 	sha1_hash := hex.EncodeToString(hash.Sum(nil))
 	fmt.Println("Hash: ", sha1_hash)
-
-	compressed, err := compress(stream) 
-	if err != nil {
-		log.Fatalf("Error while compressing %s: %s", filePath, err)
-	}
-	fmt.Printf("Compressed (%d bytes): %x\n", len(compressed), compressed)
+	return sha1_hash
 }
 
-func compress(data []byte) ([]byte, error) {
+func Compress(data []byte) ([]byte, error) {
 	var buff bytes.Buffer
 	w := zlib.NewWriter(&buff)
 

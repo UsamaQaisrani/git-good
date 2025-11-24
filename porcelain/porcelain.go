@@ -3,6 +3,7 @@ package porcelain
 import (
 	"log"
 	"os"
+	"fmt"
 	"usamaqaisrani/git-good/plumbing"
 )
 
@@ -33,7 +34,7 @@ func createDir(path string) {
 }
 
 func writeFile(path, content string) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0666)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0755)
 	if err != nil {
 		log.Fatal("Error occured while creating HEAD file:", err)
 		return
@@ -47,6 +48,46 @@ func writeFile(path, content string) {
 	}
 }
 
+func writeObject(dirName, fileName string, content []byte) {
+	filePath := objects + "/" + dirName + "/" + fileName
+	fmt.Println(filePath)
+	createDir(objects + "/" + dirName)
+	writeRawBytes(filePath, content)
+}
+
+func writeRawBytes(path string, content []byte) {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0755)
+	if err != nil {
+		log.Fatal("Error occured while creating HEAD file:", err)
+		return
+	}
+	defer f.Close()
+
+	_, err = f.Write(content)
+	if err != nil {
+		log.Fatalf("Error occured while writing %s: %s", path, err)
+		return
+	}
+}
+
 func Stage(filePath string) {
-	plumbing.HashFile(filePath)
+	stream, err := plumbing.ReadFile(filePath)
+	if err != nil {
+		log.Fatalf("Error while getting content of the %s: %s", filePath, err)
+	}
+
+	hash := plumbing.HashFile(stream)
+	if err != nil {
+		log.Fatalf("Error while hashing %s: %s", filePath, err)
+	}
+
+	compressed, err := plumbing.Compress(stream) 
+	if err != nil {
+		log.Fatalf("Error while compressing %s: %s", filePath, err)
+	}
+	fmt.Printf("Compressed (%d bytes): % x\n", len(compressed), compressed)
+
+	dirName := hash[:2]
+	fileName := hash[3:]
+	writeObject(dirName, fileName, compressed)
 }
