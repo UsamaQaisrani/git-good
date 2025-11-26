@@ -11,6 +11,7 @@ var commands = map[string]struct{}{
 	"init":        {},
 	"hash-object": {},
 	"add":         {},
+	"read-index":   {},
 }
 
 func main() {
@@ -33,6 +34,8 @@ func main() {
 		hashObject(args)
 	case "add":
 		stage(args)
+	case "read-index":
+		readIndex()
 	}
 }
 
@@ -57,4 +60,8 @@ func stage(args []string) {
 	}
 	fmt.Println("Creating hash of the file")
 	porcelain.Stage(args[1])
+}
+
+func readIndex() {
+	plumbing.ReadIndex()
 }

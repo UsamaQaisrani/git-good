@@ -2,17 +2,17 @@ package plumbing
 
 import (
 	"bytes"
-	"strings"
 	"compress/zlib"
 	"crypto/sha1"
-	"encoding/hex"
-	"io/fs"
-	"sort"
-	"path/filepath"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 )
 
 // Paths
@@ -41,10 +41,10 @@ type StageEntry struct {
 }
 
 type FileEntry struct {
-	Path string
+	Path    string
 	Content []byte
-	Info fs.FileInfo
-	Err error
+	Info    fs.FileInfo
+	Err     error
 }
 
 func ReadFile(filePath string) ([]byte, error) {
@@ -52,10 +52,14 @@ func ReadFile(filePath string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	fileSize := len(content)
+	return content, nil
+}
+
+func appendHeader(stream []byte) []byte {
+	fileSize := len(stream)
 	header := fmt.Sprintf("blob %d\x00", fileSize)
-	byteStream := append([]byte(header), content...)
-	return byteStream, nil
+	byteStream := append([]byte(header), stream...)
+	return byteStream
 }
 
 // Create a directory at given path if it doesn't exist already
@@ -131,7 +135,7 @@ func CreateIndexInstance(path, hash string) (StageEntry, error) {
 		MTimeNano: nano,
 		Dev:       0,
 		Ino:       0,
-		Mode: 0x81A4,
+		Mode:      0x81A4,
 		Uid:       0,
 		Gid:       0,
 		Size:      uint32(info.Size()),
@@ -174,7 +178,7 @@ func CreateStagingEntry(entry StageEntry) []byte {
 	buffer.WriteString(entry.Path)
 
 	buffer.WriteByte(0x00)
-	totalLen := 62 + pathLen + 1 
+	totalLen := 62 + pathLen + 1
 	padding := (8 - (totalLen % 8)) % 8
 
 	buffer.Write(make([]byte, padding))
@@ -193,8 +197,8 @@ func UpdateIndex(entries []StageEntry) error {
 	}
 	digest := sha1.Sum(indexBuf.Bytes())
 	indexBuf.Write(digest[:])
-	if _, err := os.Stat(".git"); os.IsNotExist(err) {
-		os.Mkdir(".git", 0755)
+	if _, err := os.Stat(".gitgood"); os.IsNotExist(err) {
+		os.Mkdir(".gitgood", 0755)
 	}
 
 	return os.WriteFile(index, indexBuf.Bytes(), 0644)
@@ -217,11 +221,11 @@ func WriteBlob(content []byte, hash string) error {
 }
 
 func WalkDir(rootPath string) <-chan FileEntry {
-	entries := make(chan FileEntry) 
+	entries := make(chan FileEntry)
 	go func() {
 		defer close(entries)
 
-		_ = filepath.WalkDir(rootPath, func(currPath string, d fs.DirEntry, err error) error { 
+		_ = filepath.WalkDir(rootPath, func(currPath string, d fs.DirEntry, err error) error {
 			if err != nil {
 				entries <- FileEntry{Err: err}
 				return nil
@@ -240,6 +244,7 @@ func WalkDir(rootPath string) <-chan FileEntry {
 			}
 
 			content, err := ReadFile(currPath)
+			content = appendHeader(content)
 			if err != nil {
 				entries <- FileEntry{Err: err}
 				return nil
@@ -247,18 +252,18 @@ func WalkDir(rootPath string) <-chan FileEntry {
 
 			info, err := d.Info()
 			if err != nil {
-				entries <- FileEntry{Err:err}
+				entries <- FileEntry{Err: err}
 				return nil
 			}
 
-			fileEntry := FileEntry {
-				Path: currPath,
+			fileEntry := FileEntry{
+				Path:    currPath,
 				Content: content,
-				Info: info,
-				Err: nil,
+				Info:    info,
+				Err:     nil,
 			}
 			entries <- fileEntry
-			return nil 
+			return nil
 		})
 	}()
 	return entries
