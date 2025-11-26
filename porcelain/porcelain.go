@@ -1,9 +1,9 @@
-package porcelain	
+package porcelain
 
 import (
+	"fmt"
 	"log"
 	"os"
-	"fmt"
 	"path"
 	"usamaqaisrani/git-good/plumbing"
 )
@@ -15,6 +15,7 @@ const refs = git + "/refs"
 const refHeads = refs + "/heads"
 const head = git + "/HEAD"
 const objects = git + "/objects"
+const index = git + "/index"
 
 func Init() {
 	createDir(git)
@@ -27,7 +28,7 @@ func Init() {
 	writeFile(config, configContent)
 }
 
-//Create a directory at given path if it doesn't exist already
+// Create a directory at given path if it doesn't exist already
 func createDir(path string) {
 	err := os.Mkdir(path, 0755)
 	if err != nil {
@@ -73,7 +74,7 @@ func Stage(path string) {
 		return
 	}
 
-	compressed, err := plumbing.Compress(stream) 
+	compressed, err := plumbing.Compress(stream)
 	if err != nil {
 		log.Fatalf("Error while compressing %s: %s", path, err)
 		return

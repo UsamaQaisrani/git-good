@@ -1,13 +1,29 @@
 package plumbing
 
 import (
-	"os"
-	"crypto/sha1"
-    "encoding/hex"
-	"fmt"
 	"bytes"
-    "compress/zlib"
+	"compress/zlib"
+	"crypto/sha1"
+	"encoding/hex"
+	"fmt"
+	"os"
 )
+
+type StageEntry struct {
+	CTimeSec  uint32
+	CTimeNano uint32
+	MTimeSec  uint32
+	MTimeNano uint32
+	Dev       uint32
+	Ino       uint32
+	Mode      uint32
+	Uid       uint32
+	Gid       uint32
+	Size      uint32
+	Hash      string
+	Flags     uint16
+	Path      string
+}
 
 func ReadFile(filePath string) ([]byte, error) {
 	content, err := os.ReadFile(filePath)
@@ -43,4 +59,26 @@ func Compress(data []byte) ([]byte, error) {
 	}
 
 	return buff.Bytes(), nil
+}
+
+func createNewStagingEntry(path, hash string) (StageEntry, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return StageEntry(), err
+	}
+
+	stats := info.sys().(*syscall.Stat_t)
+	return StageEntry{
+		CTimeSec:  uint32(stat.Ctim.Sec),
+		CTimeNano: uint32(stat.Ctim.Nsec),
+		MtimeSec:  uint32(stat.Mtim.Sec),
+		MTimeNano: uint32(stat.Mtim.Nsec),
+		Dev:       uint32(stat.Dev),
+		Ino:       uint32(stat.Ino),
+		Uid:       uint32(stat.Uid),
+		Gid:       uint32(stat.Gid),
+		Size:      uint32(stat.Size),
+		Hash:      hash,
+		Path:      path,
+	}, nil
 }
