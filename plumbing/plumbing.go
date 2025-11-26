@@ -5,6 +5,7 @@ import (
 	"compress/zlib"
 	"crypto/sha1"
 	"encoding/hex"
+	"encoding/binary"
 	"fmt"
 	"os"
 )
@@ -81,4 +82,12 @@ func createNewStagingEntry(path, hash string) (StageEntry, error) {
 		Hash:      hash,
 		Path:      path,
 	}, nil
+}
+
+func createHeaderForIndex(count int) []byte {
+	header := make([]byte, 12)
+	copy(header[0:4], []byte("DIRC"))
+	binary.BigEndian.PutUint32(header[4:8], 2)
+	binary.BigEndian.PutUint32(header[8:12], uint32(count))
+	return header
 }
