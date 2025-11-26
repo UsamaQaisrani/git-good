@@ -2,14 +2,27 @@ package plumbing
 
 import (
 	"bytes"
+	"strings"
 	"compress/zlib"
 	"crypto/sha1"
 	"encoding/hex"
+	"io/fs"
+	"sort"
 	"path/filepath"
 	"encoding/binary"
 	"fmt"
+	"log"
 	"os"
 )
+
+// Paths
+const git = ".gitgood"
+const config = git + "/config"
+const refs = git + "/refs"
+const refHeads = refs + "/heads"
+const head = git + "/HEAD"
+const objects = git + "/objects"
+const index = git + "/index"
 
 type StageEntry struct {
 	CTimeSec  uint32
@@ -27,6 +40,13 @@ type StageEntry struct {
 	Path      string
 }
 
+type FileEntry struct {
+	Path string
+	Content []byte
+	Info fs.FileInfo
+	Err error
+}
+
 func ReadFile(filePath string) ([]byte, error) {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
@@ -36,6 +56,38 @@ func ReadFile(filePath string) ([]byte, error) {
 	header := fmt.Sprintf("blob %d\x00", fileSize)
 	byteStream := append([]byte(header), content...)
 	return byteStream, nil
+}
+
+// Create a directory at given path if it doesn't exist already
+func CreateDir(path string) {
+	err := os.Mkdir(path, 0755)
+	if err != nil && !os.IsExist(err) {
+		log.Fatal("Error occured while create refs directory:", err)
+		return
+	}
+}
+
+// Write a file at given path with the content
+func WriteFile(path string, content any) {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0755)
+	if err != nil {
+		log.Fatal("Error occured while creating HEAD file:", err)
+		return
+	}
+	defer f.Close()
+
+	switch v := content.(type) {
+	case string:
+		_, err = f.WriteString(v)
+	case []byte:
+		_, err = f.Write(v)
+	default:
+		fmt.Println("Unrecognized content type while writing file.")
+	}
+	if err != nil {
+		log.Fatalf("Error occured while writing %s: %s", path, err)
+		return
+	}
 }
 
 func HashFile(content []byte) string {
@@ -63,29 +115,32 @@ func Compress(data []byte) ([]byte, error) {
 	return buff.Bytes(), nil
 }
 
-func createIndexInstance(path, hash string) (StageEntry, error) {
+func CreateIndexInstance(path, hash string) (StageEntry, error) {
 	info, err := os.Stat(path)
 	if err != nil {
-		return StageEntry(), err
+		return StageEntry{}, err
 	}
 
-	stats := info.sys().(*syscall.Stat_t)
+	sec := uint32(info.ModTime().Unix())
+	nano := uint32(info.ModTime().Nanosecond())
+
 	return StageEntry{
-		CTimeSec:  uint32(stat.Ctim.Sec),
-		CTimeNano: uint32(stat.Ctim.Nsec),
-		MtimeSec:  uint32(stat.Mtim.Sec),
-		MTimeNano: uint32(stat.Mtim.Nsec),
-		Dev:       uint32(stat.Dev),
-		Ino:       uint32(stat.Ino),
-		Uid:       uint32(stat.Uid),
-		Gid:       uint32(stat.Gid),
-		Size:      uint32(stat.Size),
+		CTimeSec:  sec,
+		CTimeNano: nano,
+		MTimeSec:  sec,
+		MTimeNano: nano,
+		Dev:       0,
+		Ino:       0,
+		Mode: 0x81A4,
+		Uid:       0,
+		Gid:       0,
+		Size:      uint32(info.Size()),
 		Hash:      hash,
 		Path:      path,
 	}, nil
 }
 
-func createHeaderForIndex(count int) []byte {
+func CreateHeaderForIndex(count int) []byte {
 	header := make([]byte, 12)
 	copy(header[0:4], []byte("DIRC"))
 	binary.BigEndian.PutUint32(header[4:8], 2)
@@ -93,7 +148,7 @@ func createHeaderForIndex(count int) []byte {
 	return header
 }
 
-func createStagingEntry(entry StageEntry) []byte {
+func CreateStagingEntry(entry StageEntry) []byte {
 	var buffer bytes.Buffer
 
 	binary.Write(&buffer, binary.BigEndian, entry.CTimeSec)
@@ -126,17 +181,17 @@ func createStagingEntry(entry StageEntry) []byte {
 	return buffer.Bytes()
 }
 
-func UpdateIndex(entries []IndexEntry) error {
+func UpdateIndex(entries []StageEntry) error {
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].Path < entries[j].Path
 	})
 
 	var indexBuf bytes.Buffer
-	indexBuf.Write(createHeader(len(entries)))
+	indexBuf.Write(CreateHeaderForIndex(len(entries)))
 	for _, entry := range entries {
-		indexBuf.Write(createEntryBlock(entry))
+		indexBuf.Write(CreateStagingEntry(entry))
 	}
-
+	digest := sha1.Sum(indexBuf.Bytes())
 	indexBuf.Write(digest[:])
 	if _, err := os.Stat(".git"); os.IsNotExist(err) {
 		os.Mkdir(".git", 0755)
@@ -145,14 +200,31 @@ func UpdateIndex(entries []IndexEntry) error {
 	return os.WriteFile(index, indexBuf.Bytes(), 0644)
 }
 
-func WalkDir(rootPath string) <-chan []byte {
-	entries := make(chan []byte) 
+func WriteBlob(content []byte, hash string) error {
+	compressed, err := Compress(content)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Compressed (%d bytes): % x\n", len(compressed), compressed)
+
+	dirName := hash[:2]
+	fileName := hash[2:]
+	fullBlobPath := filepath.Join(objects, dirName, fileName)
+	CreateDir(filepath.Join(objects, dirName))
+	WriteFile(fullBlobPath, compressed)
+
+	return nil
+}
+
+func WalkDir(rootPath string) <-chan FileEntry {
+	entries := make(chan FileEntry) 
 	go func() {
 		defer close(entries)
 
 		_ = filepath.WalkDir(rootPath, func(currPath string, d fs.DirEntry, err error) error { 
 			if err != nil {
-				return err
+				entries <- FileEntry{Err: err}
+				return nil
 			}
 
 			if d.IsDir() {
@@ -169,10 +241,23 @@ func WalkDir(rootPath string) <-chan []byte {
 
 			content, err := ReadFile(currPath)
 			if err != nil {
-				return err
+				entries <- FileEntry{Err: err}
+				return nil
 			}
-			entries <- content
-			
+
+			info, err := d.Info()
+			if err != nil {
+				entries <- FileEntry{Err:err}
+				return nil
+			}
+
+			fileEntry := FileEntry {
+				Path: currPath,
+				Content: content,
+				Info: info,
+				Err: nil,
+			}
+			entries <- fileEntry
 			return nil 
 		})
 	}()

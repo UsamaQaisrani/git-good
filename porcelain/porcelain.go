@@ -3,8 +3,6 @@ package porcelain
 import (
 	"fmt"
 	"log"
-	"os"
-	"path"
 	"usamaqaisrani/git-good/plumbing"
 )
 
@@ -18,72 +16,51 @@ const objects = git + "/objects"
 const index = git + "/index"
 
 func Init() {
-	createDir(git)
-	createDir(refs)
-	createDir(refHeads)
-	createDir(objects)
+	plumbing.CreateDir(git)
+	plumbing.CreateDir(refs)
+	plumbing.CreateDir(refHeads)
+	plumbing.CreateDir(objects)
 	headContent := "ref: refs/heads/master\n"
 	configContent := "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true"
-	writeFile(head, headContent)
-	writeFile(config, configContent)
+	plumbing.WriteFile(head, headContent)
+	plumbing.WriteFile(config, configContent)
 }
 
-// Create a directory at given path if it doesn't exist already
-func createDir(path string) {
-	err := os.Mkdir(path, 0755)
-	if err != nil {
-		log.Fatal("Error occured while create refs directory:", err)
-		return
-	}
-}
 
-// Write a file at given path with the content
-func writeFile(path string, content any) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0755)
-	if err != nil {
-		log.Fatal("Error occured while creating HEAD file:", err)
-		return
-	}
-	defer f.Close()
-
-	switch v := content.(type) {
-	case string:
-		_, err = f.WriteString(v)
-	case []byte:
-		_, err = f.Write(v)
-	default:
-		fmt.Println("Unrecognized content type while writing file.")
-	}
-	if err != nil {
-		log.Fatalf("Error occured while writing %s: %s", path, err)
-		return
-	}
-}
-
-// Stage the file at given path
+// Stage the file/dir at given path
 func Stage(path string) {
-	stream, err := plumbing.ReadFile(path)
-	if err != nil {
-		log.Fatalf("Error while getting content of the %s: %s", path, err)
-		return
+	files := plumbing.WalkDir(path)
+	var entries []plumbing.StageEntry
+	
+	for file := range files {
+		if file.Err != nil {
+			fmt.Printf("Warning: Skipping file due to error: %v\n", file.Err)
+			continue
+		}
+
+		hash := plumbing.HashFile(file.Content)
+		err := plumbing.WriteBlob(file.Content, hash)
+		if err != nil {
+			log.Fatal("Error while writing blob:", err)
+			return
+		}
+
+		entry, err := plumbing.CreateIndexInstance(file.Path, hash)
+		if err != nil {
+			log.Fatal("Error while creating instance for index file:", err)
+			return	
+		}
+
+		entries = append(entries, entry)
 	}
 
-	hash := plumbing.HashFile(stream)
-	if err != nil {
-		log.Fatalf("Error while hashing %s: %s", path, err)
-		return
+	if len(entries) > 0 {
+		err := plumbing.UpdateIndex(entries)
+		if err != nil {
+			fmt.Println("Failed to write the index file.")
+			return
+		}
+	} else {
+		fmt.Println("No files to stage.")
 	}
-
-	compressed, err := plumbing.Compress(stream)
-	if err != nil {
-		log.Fatalf("Error while compressing %s: %s", path, err)
-		return
-	}
-	fmt.Printf("Compressed (%d bytes): % x\n", len(compressed), compressed)
-
-	dirName := hash[:2]
-	fileName := hash[3:]
-	fullBlobPath := path.Join(objects, dirName, fileName)
-	createDir(path.Join(objects, dirName))
-	writeFile(fullBlobPath, compressed)
 }
