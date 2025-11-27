@@ -11,7 +11,7 @@ var commands = map[string]struct{}{
 	"init":        {},
 	"hash-object": {},
 	"add":         {},
-	"read-index":   {},
+	"ls-files": {},
 }
 
 func main() {
@@ -34,7 +34,7 @@ func main() {
 		hashObject(args)
 	case "add":
 		stage(args)
-	case "read-index":
+	case "ls-files":
 		readIndex()
 	}
 }

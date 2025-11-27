@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"encoding/hex"
 )
 
 func ReadIndex() error {
@@ -26,7 +27,6 @@ func ReadIndex() error {
 	var entries []StageEntry
 	i := 12
 
-	//TODO:- Iterate entry count times on rest of the data to get entries
 	for j:=0; j<7 ; j++{
 		cTimeSec := binary.BigEndian.Uint32(content[i : i+4])
 		i += 4
@@ -48,7 +48,7 @@ func ReadIndex() error {
 		i += 4
 		size := binary.BigEndian.Uint32(content[i : i+4])
 		i += 4
-		hash := string(content[i : i+20])
+		hash := hex.EncodeToString(content[i : i+20])
 		i += 20
 		pathLen := binary.BigEndian.Uint16(content[i:i+2])
 		i += 2
@@ -56,7 +56,7 @@ func ReadIndex() error {
 
 		i += int(pathLen)
 
-		// Reading the null byte
+		// Skipping the null byte (0x00)
 		i += 1
 
 		// Reading the padding
@@ -64,7 +64,7 @@ func ReadIndex() error {
 		padding := (8 - (entrySize % 8)) % 8
 		i += padding
 
-		fmt.Println(path)
+		fmt.Printf("%d %s %d %s\n", mode, hash, 0, path)
 
 		entry := StageEntry{
 			CTimeSec:  cTimeSec,
