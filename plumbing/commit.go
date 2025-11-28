@@ -2,10 +2,20 @@ package plumbing
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
-	"encoding/hex"
+	"io/fs"
+	"path/filepath"
+	"strings"
 )
+
+type Node struct {
+	Name     string
+	Mode     uint32
+	Hash     string
+	Children []*Node
+}
 
 func ReadIndex() error {
 	content, err := ReadFile(index)
@@ -27,7 +37,7 @@ func ReadIndex() error {
 	var entries []StageEntry
 	i := 12
 
-	for j:=0; j<7 ; j++{
+	for j := 0; j < 7; j++ {
 		cTimeSec := binary.BigEndian.Uint32(content[i : i+4])
 		i += 4
 		cTimeNano := binary.BigEndian.Uint32(content[i : i+4])
@@ -50,9 +60,9 @@ func ReadIndex() error {
 		i += 4
 		hash := hex.EncodeToString(content[i : i+20])
 		i += 20
-		pathLen := binary.BigEndian.Uint16(content[i:i+2])
+		pathLen := binary.BigEndian.Uint16(content[i : i+2])
 		i += 2
-		path := string(content[i:i+int(pathLen)])
+		path := string(content[i : i+int(pathLen)])
 
 		i += int(pathLen)
 
@@ -85,4 +95,56 @@ func ReadIndex() error {
 	}
 
 	return nil
+}
+
+func GenerateTree() (*Node, error) {
+	root := "."
+	tree := &Node {
+		Name: filepath.Base(root),
+		Mode: 0x81A4,
+	}
+
+	nodeMap := map[string]*Node{
+		root:tree,
+	}
+
+	err := filepath.WalkDir(root, func(currPath string, d fs.DirEntry, err error) error {
+			normPath := filepath.ToSlash(currPath)
+			if strings.Contains(normPath, ".git") || strings.Contains(normPath, git) {
+				return nil
+			}
+
+			parent := nodeMap[filepath.Dir(currPath)]
+
+			node := &Node{
+				Name: d.Name(),
+				Mode: 0x81A4,
+			}
+
+			if !d.IsDir() {
+				content, err := ReadFile(currPath)
+				if err != nil {
+					return err
+				}
+
+				hash := HashFile(content)
+				node.Hash = hash
+			}
+			
+			parent.Children = append(parent.Children, node)
+
+			if d.IsDir() {
+				nodeMap[currPath] = node
+			}
+
+		return nil
+	})
+
+
+	if err != nil {
+		return tree, err
+	}
+
+	fmt.Println("Map:", nodeMap)
+	return tree, nil
 }

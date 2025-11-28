@@ -11,7 +11,8 @@ var commands = map[string]struct{}{
 	"init":        {},
 	"hash-object": {},
 	"add":         {},
-	"ls-files": {},
+	"ls-files":    {},
+	"write-tree":  {},
 }
 
 func main() {
@@ -36,6 +37,8 @@ func main() {
 		stage(args)
 	case "ls-files":
 		readIndex()
+	case "write-tree":
+		writeTree()
 	}
 }
 
@@ -64,4 +67,8 @@ func stage(args []string) {
 
 func readIndex() {
 	plumbing.ReadIndex()
+}
+
+func writeTree() {
+	plumbing.GenerateTree()
 }

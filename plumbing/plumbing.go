@@ -166,6 +166,7 @@ func CreateStagingEntry(entry StageEntry) []byte {
 	binary.Write(&buffer, binary.BigEndian, entry.Gid)
 	binary.Write(&buffer, binary.BigEndian, entry.Size)
 
+
 	hashBytes, _ := hex.DecodeString(entry.Hash)
 	buffer.Write(hashBytes)
 
