@@ -99,8 +99,8 @@ func ReadIndex() error {
 func CreateDirTree() (*Node, error) {
 	root := "."
 	tree := &Node {
-		Name: filepath.Base(root),
-		Mode: 0x81A4,
+		Name: root,
+		Mode: 040000,
 	}
 
 	nodeMap := map[string]*Node{
@@ -109,6 +109,10 @@ func CreateDirTree() (*Node, error) {
 
 	err := filepath.WalkDir(root, func(currPath string, d fs.DirEntry, err error) error {
 			normPath := filepath.ToSlash(currPath)
+			if currPath == root {
+				return nil
+			}
+
 			if strings.Contains(normPath, ".git") || strings.Contains(normPath, git) {
 				return nil
 			}
@@ -119,7 +123,10 @@ func CreateDirTree() (*Node, error) {
 				Mode: 0x81A4,
 			}
 
-			if !d.IsDir() {
+			if d.IsDir() {
+				node.Mode = 040000
+				nodeMap[currPath] = node
+			} else {
 				content, err := ReadFile(currPath)
 				if err != nil {
 					return err
@@ -137,6 +144,7 @@ func CreateDirTree() (*Node, error) {
 
 		return nil
 	})
+
 
 	if err != nil {
 		return tree, err
